@@ -1,6 +1,5 @@
 package hello.jdbc.repository;
 
-import hello.jdbc.connection.DBConnectionUtil;
 import hello.jdbc.domain.Member;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.support.JdbcUtils;
@@ -9,15 +8,14 @@ import javax.sql.DataSource;
 import java.sql.*;
 import java.util.NoSuchElementException;
 
-//V1방식: JDBC DataSource 인터페이스 -> DriverManager로 커넥션을 얻는다.
-//DataSource 인터페이스를 사용하면,
-//나중에 DriverManager방식에서 HikariCP방식으로 바꿔도 기존 코드를 수정하지 않아도 된다.
+//V2: 커넥션을 파라미터로 전달받는 방식.
+//트랜잭션을 관리하려면, 동일한 세션에서 하나의 서비스 로직이 실행되어야함.
 @Slf4j
-public class MemberRepositoryV1
+public class MemberRepositoryV2
 {
     private final DataSource dataSource;
 
-    public MemberRepositoryV1(DataSource dataSource)
+    public MemberRepositoryV2(DataSource dataSource)
     {
         this.dataSource = dataSource;
     }
@@ -85,16 +83,53 @@ public class MemberRepositoryV1
         }
     }
 
-    public void update(String memberId, int money)
+    public Member findById(Connection conn, String memberId)
+    {
+        String sql = "select * from member where member_id = ?";
+
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        try
+        {
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setString(1, memberId);
+            rs = pstmt.executeQuery();
+
+            if (rs.next())
+            {
+                Member member = new Member();
+                member.setMemberId(rs.getString("member_id"));
+                member.setMoney(rs.getInt("money"));
+                return member;
+            }
+            else
+            {
+                throw new NoSuchElementException("member not found memberId = " + memberId);
+            }
+        }
+        catch (SQLException e)
+        {
+            log.error("db error", e);
+            throw new RuntimeException(e);
+        } finally
+        {
+            JdbcUtils.closeResultSet(rs);
+            JdbcUtils.closeStatement(pstmt);
+            //JdbcUtils.closeConnection(conn);
+            //커넥션은 동일한 트랜잭션의 다른 쿼리를 보낼 때도 사용하기 때문에,
+            //절대로 반납하면 안된다.
+        }
+    }
+
+    public void update(Connection conn, String memberId, int money)
     {
         String sql = "update member set money=? where member_id=?";
 
-        Connection conn = null;
         PreparedStatement pstmt = null;
 
         try
         {
-            conn = getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setInt(1, money);
             pstmt.setString(2, memberId);
@@ -105,7 +140,7 @@ public class MemberRepositoryV1
             throw new RuntimeException(e);
         } finally
         {
-            close(conn, pstmt, null);
+            JdbcUtils.closeStatement(pstmt);
         }
     }
 
