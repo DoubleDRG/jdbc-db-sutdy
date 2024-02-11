@@ -1,8 +1,8 @@
 package hello.jdbc.service;
 
 import hello.jdbc.domain.Member;
-import hello.jdbc.repository.MemberRepositoryV1;
 import hello.jdbc.repository.MemberRepositoryV2;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
@@ -10,41 +10,40 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 @Slf4j
+@RequiredArgsConstructor
 //트랜잭션을 고려한 서비스
 public class MemberServiceV2
 {
     private final DataSource dataSource;
     private final MemberRepositoryV2 memberRepository;
 
-    public MemberServiceV2(DataSource dataSource, MemberRepositoryV2 memberRepository)
-    {
-        this.dataSource = dataSource;
-        this.memberRepository = memberRepository;
-    }
-
-    //가상의 이체 중 오류발생 시뮬레이션 메서드
+    //트랜잭션은 비즈니스 로직이 있는 서비스 계층 단위로 이루어져야 한다.
+    //그러나 그렇게 하려고 트랜잭션 관련 코드를 서비스 계층에 작성하면, JDBC기술에 의존하게 된다.
+    //서비스 계층의 코드는 특정 기술에 의존하면 안된다.
+    //다른 DB기술로 교체할 때, 모든 서비스 계층 코드를 수정해야 하기 때문이다.
+    //스프링은 순수한 서비스계층을 유지하면서, 트랜잭션도 서비스 계층에서 관리하는 기술을 제공한다.
     public void accountTransfer(String fromId, String toId, int money) throws SQLException
     {
-        Connection conn = dataSource.getConnection();
+        Connection con = dataSource.getConnection();
 
         try
         {
-            conn.setAutoCommit(false);
-            bizLogin(fromId, toId, money, conn);
-            conn.commit();
+            con.setAutoCommit(false);
+            bizLogic(fromId, toId, money, con);
+            con.commit();
         }
         catch (Exception e)
         {
-            conn.rollback();
+            con.rollback();
         } finally
         {
-            if (conn != null)
+            if (con != null)
             {
                 try
                 {
                     //커넥션풀로 돌려보낼 때, 오토커밋모드를 자동으로 설정한다.
-                    conn.setAutoCommit(true);
-                    conn.close();
+                    con.setAutoCommit(true);
+                    con.close();
                 }
                 catch (Exception e)
                 {
@@ -55,7 +54,7 @@ public class MemberServiceV2
 
     }
 
-    private void bizLogin(String fromId, String toId, int money, Connection conn)
+    private void bizLogic(String fromId, String toId, int money, Connection conn)
     {
         Member fromMember = memberRepository.findById(fromId);
         Member toMember = memberRepository.findById(toId);

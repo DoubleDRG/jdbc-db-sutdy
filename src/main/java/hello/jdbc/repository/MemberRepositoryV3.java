@@ -9,9 +9,6 @@ import javax.sql.DataSource;
 import java.sql.*;
 import java.util.NoSuchElementException;
 
-//V3: 트랜잭션 - 트랜잭션 매니저
-// DataSource - DataSourceUtils를 씀 
-// 커넥션을 끊을 때도 - DataSourceUtils를 씀
 @Slf4j
 public class MemberRepositoryV3
 {
@@ -26,13 +23,13 @@ public class MemberRepositoryV3
     {
         String sql = "insert into member(member_id, money) values (?, ?)";
 
-        Connection conn = null;
+        Connection con = null;
         PreparedStatement pstmt = null;
 
         try
         {
-            conn = getConnection();
-            pstmt = conn.prepareStatement(sql);
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
             pstmt.setString(1, member.getMemberId());
             pstmt.setInt(2, member.getMoney());
             int count = pstmt.executeUpdate();
@@ -42,24 +39,25 @@ public class MemberRepositoryV3
         {
             log.error("db error", e);
             throw new RuntimeException(e);
-        } finally
+        }
+        finally
         {
-            close(conn, pstmt, null);
+            close(con, pstmt, null);
         }
     }
 
-    public Member findById(String memberId)
+    public Member findById(String memberId) throws SQLException
     {
         String sql = "select * from member where member_id = ?";
 
-        Connection conn = null;
+        Connection con = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
 
         try
         {
-            conn = getConnection();
-            pstmt = conn.prepareStatement(sql);
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
             pstmt.setString(1, memberId);
             rs = pstmt.executeQuery();
 
@@ -69,8 +67,7 @@ public class MemberRepositoryV3
                 member.setMemberId(rs.getString("member_id"));
                 member.setMoney(rs.getInt("money"));
                 return member;
-            }
-            else
+            } else
             {
                 throw new NoSuchElementException("member not found memberId = " + memberId);
             }
@@ -78,34 +75,38 @@ public class MemberRepositoryV3
         catch (SQLException e)
         {
             log.error("db error", e);
-            throw new RuntimeException(e);
-        } finally
+            throw e;
+        }
+        finally
         {
-            close(conn, pstmt, rs);
+            close(con, pstmt, rs);
         }
     }
 
-    public void update(String memberId, int money)
+    public void update(String memberId, int money) throws SQLException
     {
         String sql = "update member set money=? where member_id=?";
 
-        Connection conn = null;
+        Connection con = null;
         PreparedStatement pstmt = null;
 
         try
         {
-            conn = getConnection();
-            pstmt = conn.prepareStatement(sql);
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
             pstmt.setInt(1, money);
             pstmt.setString(2, memberId);
-            pstmt.executeUpdate();
+            int resultSize = pstmt.executeUpdate();
+            log.info("resultSize={}", resultSize);
         }
         catch (SQLException e)
         {
-            throw new RuntimeException(e);
-        } finally
+            log.error("db error", e);
+            throw e;
+        }
+        finally
         {
-            close(conn, pstmt, null);
+            close(con, pstmt, null);
         }
     }
 
@@ -126,7 +127,8 @@ public class MemberRepositoryV3
         catch (SQLException e)
         {
             throw new RuntimeException(e);
-        } finally
+        }
+        finally
         {
             close(conn, pstmt, null);
         }
@@ -148,24 +150,25 @@ public class MemberRepositoryV3
         catch (SQLException e)
         {
             throw new RuntimeException(e);
-        } finally
+        }
+        finally
         {
             close(conn, pstmt, null);
         }
     }
 
-    private void close(Connection conn, Statement stmt, ResultSet rs)
+    private void close(Connection con, Statement stmt, ResultSet rs)
     {
         JdbcUtils.closeResultSet(rs);
         JdbcUtils.closeStatement(stmt);
-
-        //주의! 트랜잭션 동기화를 사용하려면, DataSourceUtils를 사용해야 한다.
-        DataSourceUtils.releaseConnection(conn, dataSource);
+        //트랜잭션 동기화를 사용하려면,
+        // DataSourceUtils로 Spring 트랜잭션 동기화 매니저의 도움을 받아서 connection을 꺼야한다.
+        DataSourceUtils.releaseConnection(con, dataSource);
     }
 
     private Connection getConnection() throws SQLException
     {
-        //주의! 트랜잭션 동기화를 하려면, DataSourceUtils를 사용해야 한다.
+        //트랜잭션 동기화를 사용하려면, DataSourceUtils로 Spring의 도움을 받아서 connection을 꺼내야 한다.
         Connection con = DataSourceUtils.getConnection(dataSource);
         log.info("get connection={}, class={}", con, con.getClass());
         return con;
