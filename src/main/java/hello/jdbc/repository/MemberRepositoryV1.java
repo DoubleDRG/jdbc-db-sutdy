@@ -26,13 +26,13 @@ public class MemberRepositoryV1
     {
         String sql = "insert into member(member_id, money) values (?, ?)";
 
-        Connection conn = null;
+        Connection con = null;
         PreparedStatement pstmt = null;
 
         try
         {
-            conn = getConnection();
-            pstmt = conn.prepareStatement(sql);
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
             pstmt.setString(1, member.getMemberId());
             pstmt.setInt(2, member.getMoney());
             int count = pstmt.executeUpdate();
@@ -44,7 +44,7 @@ public class MemberRepositoryV1
             throw new RuntimeException(e);
         } finally
         {
-            close(conn, pstmt, null);
+            close(con, pstmt, null);
         }
     }
 
